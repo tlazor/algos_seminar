@@ -63,7 +63,6 @@ def _():
                 return result
             return wrapper
         return decorator
-
     return (
         StringIO,
         asizeof,
@@ -117,6 +116,43 @@ def _(mo):
 
 
 @app.cell
+def _(math):
+    def validate_btree(node, t, depth=0, leaf_depths=None):
+        if leaf_depths is None:
+            leaf_depths = []
+
+        # Check keys and children consistency
+        if len(node.children) != len(node.keys) + 1 and not node.leaf:
+            print(f"Invalid node at depth {depth}: keys={node.keys}, children={len(node.children)}")
+            return False
+
+        # Check for minimum and maximum keys in non-root nodes
+        if depth > 0 and (len(node.keys) < math.ceil(t / 2) - 1 or len(node.keys) > t - 1):
+            print(f"Invalid key count in node at depth {depth}: {node.keys}")
+            return False
+
+        # Check for leaf depths consistency
+        if node.leaf:
+            leaf_depths.append(depth)
+        else:
+            for child in node.children:
+                if not validate_btree(child, t, depth + 1, leaf_depths):
+                    return False
+
+        # Ensure all leaves are at the same depth
+        if depth == 0 and len(set(leaf_depths)) > 1:
+            print(f"Leaves are at inconsistent depths: {leaf_depths}")
+            return False
+
+        return True
+
+    def val_btree(tree):
+        return validate_btree(tree.root, tree.t)
+
+    return val_btree, validate_btree
+
+
+@app.cell
 def _(mo):
     mo.md(r"""### BTree Node""")
     return
@@ -138,7 +174,6 @@ def _():
             else:
                 children_repr = ", ".join(repr(child) if child else "None" for child in self.children)
                 return f"Internal(keys={list(self.keys)}, children=[{children_repr}])"
-
     return BTreeNode, array
 
 
@@ -157,8 +192,8 @@ def _(BTreeNode, array, math):
 
         def insert(self, k):
             root = self.root
-            if len(root.keys) == self.t - 1:  # Maximum number of keys
-                temp = BTreeNode(False)  # New root must not be a leaf
+            if len(root.keys) == 2 * self.t - 1:  # Maximum number of keys
+                temp = BTreeNode(leaf=False)  # New root is not a leaf
                 temp.children.append(self.root)
                 self.root = temp
                 self.split_child(temp, 0)
@@ -169,17 +204,19 @@ def _(BTreeNode, array, math):
         def insert_non_full(self, x, k):
             i = len(x.keys) - 1
             if x.leaf:
-                # Resize the keys array to make space for the new key
-                x.keys = array('i', list(x.keys) + [0])  # Extend with a dummy value (e.g., 0)
+                # Insert the key in the correct position
+                x.keys = array('i', list(x.keys) + [0]) # Add a placeholder for the new key
                 while i >= 0 and k < x.keys[i]:
                     x.keys[i + 1] = x.keys[i]
                     i -= 1
-                x.keys[i + 1] = k  # Insert the new key in the correct position
+                x.keys[i + 1] = k
             else:
+                # Find the child to recurse into
                 while i >= 0 and k < x.keys[i]:
                     i -= 1
                 i += 1
-                if len(x.children[i].keys) == self.t - 1:
+                # Split the child if it's full
+                if len(x.children[i].keys) == 2 * self.t - 1:
                     self.split_child(x, i)
                     if k > x.keys[i]:
                         i += 1
@@ -213,28 +250,31 @@ def _(BTreeNode, array, math):
             i = 0
             while i < len(x.keys) and k > x.keys[i]:
                 i += 1
-
-            # print(f"{i=}")
-            # print(x.leaf, len(x.children))
+        
             if x.leaf:
                 if i < len(x.keys) and x.keys[i] == k:
-                    x.keys.pop(i)
+                    x.keys.pop(i)  # Delete key directly from leaf
                 return
+        
+            # Key found in internal node
             if i < len(x.keys) and x.keys[i] == k:
                 self.delete_internal_node(x, k, i)
-            elif len(x.children[i].keys) > t_min:
-                self._delete(x.children[i], k)
             else:
-                # Fix deficiency in the child
-                self._fix_deficiency(x, i)
-
-                # Recalculate `i` after fixing deficiency
-                if i < len(x.keys) and k > x.keys[i]:
-                    i += 1
+                # Ensure child `i` exists before accessing
                 if i >= len(x.children):
-                    i = len(x.children) - 1  # Clamp `i` to the last valid child index
-                # print(f"{i=} {len(x.children)=} {x.keys=}")
-                # Continue the deletion process
+                    raise ValueError(f"Invalid child index {i}. Node: {x.keys}, Children: {len(x.children)}")
+                
+                # If the child is deficient, fix it
+                if len(x.children[i].keys) <= t_min:
+                    self._fix_deficiency(x, i)
+        
+                    # Recalculate `i` after fixing deficiency
+                    if i < len(x.keys) and k > x.keys[i]:
+                        i += 1
+                    if i >= len(x.children):  # Revalidate index
+                        i = len(x.children) - 1
+        
+                # Continue deletion in the adjusted child
                 self._delete(x.children[i], k)
 
         def delete_internal_node(self, x, k, i):
@@ -356,6 +396,32 @@ def _(BTreeNode, array, math):
 
             return results
     return (BTree,)
+
+
+@app.cell
+def _(BTree, master_dataset, val_btree):
+    btree = BTree(3)
+
+    temp = 6
+
+    # Insert keys
+    keys_to_insert = master_dataset[:temp]
+    for key in keys_to_insert:
+        btree.insert(key)
+
+    print(val_btree(btree))
+
+    btree.print_tree()
+
+    # Test deletion cases
+    keys_to_delete = master_dataset[:temp]
+    for key in keys_to_delete:
+        print(f"\n")
+        btree.print_tree()
+        print(f"\nDeleting key {key}:")
+        btree.delete(key)
+    btree.print_tree()
+    return btree, key, keys_to_delete, keys_to_insert, temp
 
 
 @app.cell
@@ -493,7 +559,7 @@ def _(BPlusNode, math):
                 node.parent = new_root
                 new_child.parent = new_root
                 return
-        
+
             # Insert the new value and child into the parent node
             parent_node = node.parent
             parent_keys = parent_node.keys
@@ -502,31 +568,31 @@ def _(BPlusNode, math):
                     # Insert the new value and new child at the appropriate position
                     parent_node.values = parent_node.values[:i] + [new_value] + parent_node.values[i:]
                     parent_node.keys = parent_node.keys[:i + 1] + [new_child] + parent_node.keys[i + 1:]
-                    
+
                     # If the parent node is overfull, split it
                     if len(parent_node.keys) > parent_node.order:
                         new_parent = BPlusNode(parent_node.order)
                         new_parent.parent = parent_node.parent
                         mid_index = int(math.ceil(parent_node.order / 2)) - 1
-                        
+
                         # Distribute values and keys
                         new_parent.values = parent_node.values[mid_index + 1:]
                         new_parent.keys = parent_node.keys[mid_index + 1:]
                         middle_value = parent_node.values[mid_index]
-                        
+
                         # Trim the original parent node
                         if mid_index == 0:
                             parent_node.values = parent_node.values[:mid_index + 1]
                         else:
                             parent_node.values = parent_node.values[:mid_index]
                         parent_node.keys = parent_node.keys[:mid_index + 1]
-                        
+
                         # Update parent references
                         for child in parent_node.keys:
                             child.parent = parent_node
                         for child in new_parent.keys:
                             child.parent = new_parent
-                        
+
                         # Recursively insert the middle value into the parent
                         self.insert_in_parent(parent_node, middle_value, new_parent)
                     return
@@ -536,22 +602,22 @@ def _(BPlusNode, math):
         def delete(self, key):
             # Find the node containing the key
             node_ = self.search(key)
-        
+
             if not node_:
                 print("Key not found")
                 return
-        
+
             # Locate the key within the node
             for i, key_list in enumerate(node_.keys):
                 if key in key_list:
                     # Remove the key from the key list
                     key_list.remove(key)
-        
+
                     # If the key list becomes empty, handle node adjustment
                     if not key_list:
                         del node_.keys[i]
                         node_.values.pop(i)
-        
+
                         if node_ == self.root:
                             # Special case: if the root becomes empty
                             if not node_.keys:
@@ -577,7 +643,7 @@ def _(BPlusNode, math):
 
         # Delete an entry
         def delete_entry(self, current_node, target_value, target_key):
-        
+
             # Remove the key and value if the current node is not a leaf
             if not current_node.is_leaf:
                 for i, key in enumerate(current_node.keys):
@@ -588,20 +654,20 @@ def _(BPlusNode, math):
                     if value == target_value:
                         current_node.values.pop(i)
                         break
-        
+
             # Adjust the root if it becomes a single key
             if self.root == current_node and len(current_node.keys) == 1:
                 self.root = current_node.keys[0]
                 current_node.keys[0].parent = None
                 del current_node
                 return
-        
+
             # Check if the node is underfull
             is_underfull = (
                 (len(current_node.keys) < int(math.ceil(current_node.order / 2)) and not current_node.is_leaf)
                 or (len(current_node.values) < int(math.ceil((current_node.order - 1) / 2)) and current_node.is_leaf)
             )
-        
+
             if is_underfull:
                 is_predecessor = False
                 parent_node = current_node.parent
@@ -609,7 +675,7 @@ def _(BPlusNode, math):
                 next_node = None
                 previous_key = None
                 next_key = None
-        
+
                 for i, child in enumerate(parent_node.keys):
                     if child == current_node:
                         if i > 0:
@@ -618,7 +684,7 @@ def _(BPlusNode, math):
                         if i < len(parent_node.keys) - 1:
                             next_node = parent_node.keys[i + 1]
                             next_key = parent_node.values[i]
-        
+
                 # Determine the neighbor node and value
                 if not previous_node:
                     neighbor_node = next_node
@@ -635,23 +701,23 @@ def _(BPlusNode, math):
                         is_predecessor = True
                         neighbor_node = previous_node
                         separator_value = previous_key
-        
+
                 # Merge or redistribute
                 if len(current_node.values) + len(neighbor_node.values) < current_node.order:
                     if not is_predecessor:
                         current_node, neighbor_node = neighbor_node, current_node
-        
+
                     neighbor_node.keys += current_node.keys
                     if not current_node.is_leaf:
                         neighbor_node.values.append(separator_value)
                     else:
                         neighbor_node.next_key = current_node.next_key
                     neighbor_node.values += current_node.values
-        
+
                     if not neighbor_node.is_leaf:
                         for child in neighbor_node.keys:
                             child.parent = neighbor_node
-        
+
                     self.delete_entry(current_node.parent, separator_value, current_node)
                     del current_node
                 else:
@@ -677,7 +743,7 @@ def _(BPlusNode, math):
                             current_node.keys.append(moved_key)
                             current_node.values.append(moved_value)
                             BPlusTree.temp(parent_node, separator_value, neighbor_node.values[0])
-        
+
                     if not neighbor_node.is_leaf:
                         for child in neighbor_node.keys:
                             child.parent = neighbor_node
@@ -687,8 +753,6 @@ def _(BPlusNode, math):
                     if not parent_node.is_leaf:
                         for child in parent_node.keys:
                             child.parent = parent_node
-
-                        
     return (BPlusTree,)
 
 
@@ -730,12 +794,9 @@ def _(BPlusTree):
             else:
                 tree.insert(i)
 
-        return tree
-
     def delete_tree(dataset, tree):
         for i in dataset:
             tree.delete(i)
-        return tree
 
     def search_tree(searchables, tree):
         for i in searchables:
@@ -796,24 +857,24 @@ def _(
                 profiled_delete = profile(tree_type=tree_type, order=order, operation="Deletion", tree_size=d_size)(delete_tree)
                 profiled_search = profile(tree_type=tree_type, order=order, operation="Search", tree_size=d_size)(search_tree)
                 profiled_range_search = profile(tree_type=tree_type, order=order, operation="Range Search", tree_size=d_size)(range_search_tree)
-                
+
                 dataset = master_dataset[:d_size]
-        
+
                 # Creation experiment
                 tree = tree_type(order)
-                tree = profiled_create(dataset, tree)
+                profiled_create(dataset, tree)
                 print(f"\tsize of tree: {asizeof(tree)}")
-        
+
                 # Search experiment
                 profiled_search(dataset, tree)
-        
+
                 # Range Search experiment
                 pairs = split_into_pairs(dataset, d_size // 10)
                 profiled_range_search(pairs, tree)
-        
+
                 # Deletion experiment
-                tree = profiled_delete(dataset, tree)
-        
+                profiled_delete(dataset, tree)
+
                 del tree
     return (all_tests,)
 
