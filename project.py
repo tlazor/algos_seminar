@@ -17,33 +17,97 @@ def _(mo):
 
 
 @app.cell
-def _(__file__):
+def _():
     import cProfile
     import pstats
+    import pandas as pd
     from io import StringIO
     import os
 
     from pympler.asizeof import asizeof
 
-    def profile(func):
-        def wrapper(*args, **kwargs):
-            profiler = cProfile.Profile()
-            profiler.enable()
-            result = func(*args, **kwargs)
-            profiler.disable()
-            s = StringIO()
-            ps = pstats.Stats(profiler, stream=s).strip_dirs().sort_stats('cumulative')
+    # Initialize the DataFrame
+    profile_data = pd.DataFrame(columns=["tree_type", "order", "operation", "cumulative_time", "tree_size"])
 
-            # Filter stats to include only functions from your script
-            script_name = os.path.basename(__file__)  # Get the script name
-            filtered_stats = [
-                print(f"Cumulative time for {func.__name__}: {value[3]:.6f} seconds")  # Extract the function name
-                for key, value in ps.stats.items() if func.__name__ == key[2]
-            ]
+    def profile(tree_type=None, order=None, operation=None, tree_size=None):
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                profiler = cProfile.Profile()
+                profiler.enable()
+                result = func(*args, **kwargs)
+                profiler.disable()
+                s = StringIO()
+                ps = pstats.Stats(profiler, stream=s).strip_dirs().sort_stats('cumulative')
 
-            return result
-        return wrapper
-    return StringIO, asizeof, cProfile, os, profile, pstats
+                # Extract cumulative time for the specific function
+                cumulative_time = None
+                for key, value in ps.stats.items():
+                    if func.__name__ == key[2]:  # Check if the function name matches
+                        cumulative_time = value[3]  # Extract cumulative time
+                        break
+
+                # Add a new row to the DataFrame
+                if cumulative_time is not None:
+                    global profile_data
+                    profile_data = pd.concat([
+                        profile_data,
+                        pd.DataFrame([{
+                            "tree_type": tree_type.__name__,
+                            "order": order,
+                            "operation": operation,
+                            "cumulative_time": cumulative_time,
+                            "tree_size": tree_size
+                        }])
+                    ], ignore_index=True)
+
+                return result
+            return wrapper
+        return decorator
+
+    return (
+        StringIO,
+        asizeof,
+        cProfile,
+        os,
+        pd,
+        profile,
+        profile_data,
+        pstats,
+    )
+
+
+@app.cell
+def _():
+    # import cProfile
+    # import pstats
+    # from io import StringIO
+    # import os
+
+    # from pympler.asizeof import asizeof
+
+    # import pandas as pd
+
+    # results_df = pd.Dataframe()
+
+    # def profile(func):
+    #     def wrapper(*args, **kwargs):
+    #         profiler = cProfile.Profile()
+    #         profiler.enable()
+    #         result = func(*args, **kwargs)
+    #         profiler.disable()
+    #         s = StringIO()
+    #         ps = pstats.Stats(profiler, stream=s).strip_dirs().sort_stats('cumulative')
+
+    #         # Filter stats to include only functions from your script
+    #         script_name = os.path.basename(__file__)  # Get the script name
+    #         filtered_stats = [
+    #             print(f"Cumulative time for {func.__name__}: {value[3]:.6f} seconds")  # Extract the function name
+    #             for key, value in ps.stats.items() if func.__name__ == key[2]
+    #         ]
+
+    #         return result
+    #     return wrapper
+    return
 
 
 @app.cell
@@ -65,8 +129,8 @@ def _():
     class BTreeNode:
         def __init__(self, leaf=False):
             self.leaf = leaf
-            self.keys = array('i')  # Assuming integer keys; change 'i' as needed for other types
-            self.children = []      # Still a list because it stores references to other nodes
+            self.keys = array('i')
+            self.children = []
 
         def __repr__(self):
             if self.leaf:
@@ -641,7 +705,7 @@ def _(mo):
 
 
 @app.cell
-def _(BPlusTree, profile):
+def _(BPlusTree):
     import random
     random.seed(0)
 
@@ -659,7 +723,6 @@ def _(BPlusTree, profile):
         dataset = random.sample(range(num_elements * 10), num_elements)
         return dataset
 
-    @profile
     def create_tree(dataset, tree):
         for i in dataset:
             if isinstance(tree, BPlusTree):
@@ -669,18 +732,15 @@ def _(BPlusTree, profile):
 
         return tree
 
-    @profile
     def delete_tree(dataset, tree):
         for i in dataset:
             tree.delete(i)
         return tree
 
-    @profile
     def search_tree(searchables, tree):
         for i in searchables:
             tree.search(i)
 
-    @profile
     def range_search_tree(pairs, tree):
         for low, high in pairs:
             tree.range_search(low, high)
@@ -724,41 +784,37 @@ def _(
     asizeof,
     create_tree,
     delete_tree,
+    profile,
     range_search_tree,
     search_tree,
     split_into_pairs,
 ):
-    def all_tests(master_dataset, dataset_sizes, order, tree_type):
-        for d_size in dataset_sizes:
-            dataset = master_dataset[:d_size]
-
-            print(f"\nsize: {d_size} and order: {order}")
-
-            # Creation experiment
-            print(f"\tInsertion")
-            tree = tree_type(order)
-            print("\t", end="")
-            tree = create_tree(dataset, tree)
-            print(f"\tsize of tree: {asizeof(tree)}")
-
-            # Search experiment
-            print(f"\tSearch")
-            print("\t", end="")
-            search_tree(dataset, tree)
-
-            # Range Search experiment
-            print(f"\tRange Search")
-            pairs = split_into_pairs(dataset, d_size // 10)
-            print("\t", end="")
-            range_search_tree(pairs, tree)
-
-            # Deletion experiment
-            print(f"\tDeletion")
-            print("\t", end="")
-            tree = delete_tree(dataset, tree)
-            print(f"\tsize of tree: {asizeof(tree)}")
-
-            del tree
+    def all_tests(master_dataset, dataset_sizes, orders, tree_type):
+        for order in orders:
+            for d_size in dataset_sizes:
+                profiled_create = profile(tree_type=tree_type, order=order, operation="Insertion", tree_size=d_size)(create_tree)
+                profiled_delete = profile(tree_type=tree_type, order=order, operation="Deletion", tree_size=d_size)(delete_tree)
+                profiled_search = profile(tree_type=tree_type, order=order, operation="Search", tree_size=d_size)(search_tree)
+                profiled_range_search = profile(tree_type=tree_type, order=order, operation="Range Search", tree_size=d_size)(range_search_tree)
+                
+                dataset = master_dataset[:d_size]
+        
+                # Creation experiment
+                tree = tree_type(order)
+                tree = profiled_create(dataset, tree)
+                print(f"\tsize of tree: {asizeof(tree)}")
+        
+                # Search experiment
+                profiled_search(dataset, tree)
+        
+                # Range Search experiment
+                pairs = split_into_pairs(dataset, d_size // 10)
+                profiled_range_search(pairs, tree)
+        
+                # Deletion experiment
+                tree = profiled_delete(dataset, tree)
+        
+                del tree
     return (all_tests,)
 
 
@@ -769,25 +825,33 @@ def _(mo):
 
 
 @app.cell
-def _(generate_dataset, random):
+def _(generate_dataset, profile_data, random):
     random.seed(0)
 
+    profile_data.drop(profile_data.index, inplace=True)
+
     dataset_sizes = [10**i for i in range(2, 6)]
-    order = 4
+    orders = [3,4,5]
 
     master_dataset = generate_dataset(dataset_sizes[-1])
-    return dataset_sizes, master_dataset, order
+    return dataset_sizes, master_dataset, orders
 
 
 @app.cell
-def _(BTree, all_tests, dataset_sizes, master_dataset, order):
-    all_tests(master_dataset, dataset_sizes, order, BTree)
+def _(BTree, all_tests, dataset_sizes, master_dataset, orders):
+    all_tests(master_dataset, dataset_sizes, orders, BTree)
     return
 
 
 @app.cell
-def _(BPlusTree, all_tests, dataset_sizes, master_dataset, order):
-    all_tests(master_dataset, dataset_sizes, order, BPlusTree)
+def _(BPlusTree, all_tests, dataset_sizes, master_dataset, orders):
+    all_tests(master_dataset, dataset_sizes, orders, BPlusTree)
+    return
+
+
+@app.cell
+def _(profile_data):
+    profile_data
     return
 
 
@@ -798,9 +862,7 @@ def _(mo):
 
 
 @app.cell
-def _():
-    import pandas as pd
-
+def _(pd):
     # Data extracted from the input
     data = [
         {"size": 100, "order": 4, "operation": "Insertion", "cumulative_time": 0.000413, "tree_size": 20656},
@@ -823,7 +885,7 @@ def _():
 
     # Convert the data to a DataFrame
     df = pd.DataFrame(data)
-    return data, df, pd
+    return data, df
 
 
 @app.cell
