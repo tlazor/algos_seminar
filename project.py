@@ -60,12 +60,13 @@ def _(mo):
 
 @app.cell
 def _():
-    # Btree node
+    from array import array
+
     class BTreeNode:
         def __init__(self, leaf=False):
             self.leaf = leaf
-            self.keys = []
-            self.children = []
+            self.keys = array('i')  # Assuming integer keys; change 'i' as needed for other types
+            self.children = []      # Still a list because it stores references to other nodes
 
         def __repr__(self):
             if self.leaf:
@@ -73,7 +74,8 @@ def _():
             else:
                 children_repr = ", ".join(repr(child) if child else "None" for child in self.children)
                 return f"Internal(keys={list(self.keys)}, children=[{children_repr}])"
-    return (BTreeNode,)
+
+    return BTreeNode, array
 
 
 @app.cell
@@ -83,7 +85,7 @@ def _(mo):
 
 
 @app.cell
-def _(BTreeNode, math):
+def _(BTreeNode, array, math):
     class BTree:
         def __init__(self, t):
             self.root = BTreeNode(True)
@@ -103,11 +105,12 @@ def _(BTreeNode, math):
         def insert_non_full(self, x, k):
             i = len(x.keys) - 1
             if x.leaf:
-                x.keys.append(None)  # Placeholder
+                # Resize the keys array to make space for the new key
+                x.keys = array('i', list(x.keys) + [0])  # Extend with a dummy value (e.g., 0)
                 while i >= 0 and k < x.keys[i]:
                     x.keys[i + 1] = x.keys[i]
                     i -= 1
-                x.keys[i + 1] = k
+                x.keys[i + 1] = k  # Insert the new key in the correct position
             else:
                 while i >= 0 and k < x.keys[i]:
                     i -= 1
@@ -304,11 +307,11 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _(array):
     class BPlusNode:
         def __init__(self, order):
             self.order = order
-            self.values = []
+            self.values = array('i')
             self.keys = []
             self.next_key = None
             self.parent = None
@@ -316,22 +319,23 @@ def _():
 
         # Insert at the leaf
         def insert_at_leaf(self, leaf, value, key):
-            if (self.values):
-                temp1 = self.values
-                for i in range(len(temp1)):
-                    if (value == temp1[i]):
-                        self.keys[i].append(key)
+            if self.values:
+                for i in range(len(self.values)):
+                    if value == self.values[i]:
+                        self.keys[i].append(key)  # Append key to the existing array at index i
                         break
-                    elif (value < temp1[i]):
-                        self.values = self.values[:i] + [value] + self.values[i:]
+                    elif value < self.values[i]:
+                        # Insert value and key at the correct position
+                        self.values = array('i', self.values[:i]) + array('i', [value]) + array('i', self.values[i:])
                         self.keys = self.keys[:i] + [[key]] + self.keys[i:]
                         break
-                    elif (i + 1 == len(temp1)):
+                    elif i + 1 == len(self.values):
                         self.values.append(value)
                         self.keys.append([key])
                         break
             else:
-                self.values = [value]
+                # Initialize with the first value and key
+                self.values = array('i', [value])
                 self.keys = [[key]]
     return (BPlusNode,)
 
@@ -776,8 +780,8 @@ def _(generate_dataset, random):
 
 
 @app.cell
-def _():
-    #all_tests(master_dataset, dataset_sizes, order, BTree)
+def _(BTree, all_tests, dataset_sizes, master_dataset, order):
+    all_tests(master_dataset, dataset_sizes, order, BTree)
     return
 
 
