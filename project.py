@@ -245,17 +245,6 @@ def _(BTreeNode, math):
                 self.print_tree(child, level)
 
         def search(self, key, x=None):
-            """
-            Search for a key in the B-tree.
-
-            Parameters:
-                key: The key to search for.
-                x: The node to start searching from (defaults to the root).
-
-            Returns:
-                A tuple (node, index) if the key is found.
-                None if the key is not found.
-            """
             if x is None:
                 x = self.root  # Start from the root if no node is provided
 
@@ -276,18 +265,6 @@ def _(BTreeNode, math):
             return self.search(key, x.children[i])
 
         def range_search(self, low, high, x=None, results=None):
-            """
-            Perform a range search in the B-tree to find all keys between low and high (inclusive).
-
-            Parameters:
-                low: The lower bound of the range.
-                high: The upper bound of the range.
-                x: The current node (defaults to the root if None).
-                results: A list to collect the keys (used during recursion).
-
-            Returns:
-                A list of keys within the specified range.
-            """
             if x is None:
                 x = self.root  # Start from the root if no node is provided
             if results is None:
@@ -438,41 +415,54 @@ def _(BPlusNode, math):
             return False
 
         # Inserting at the parent
-        def insert_in_parent(self, n, value, ndash):
-            if (self.root == n):
-                rootNode = BPlusNode(n.order)
-                rootNode.values = [value]
-                rootNode.keys = [n, ndash]
-                self.root = rootNode
-                n.parent = rootNode
-                ndash.parent = rootNode
+        def insert_in_parent(self, node, new_value, new_child):
+            # If the node is the root, create a new root
+            if self.root == node:
+                new_root = BPlusNode(node.order)
+                new_root.values = [new_value]
+                new_root.keys = [node, new_child]
+                self.root = new_root
+                node.parent = new_root
+                new_child.parent = new_root
                 return
-
-            parentNode = n.parent
-            temp3 = parentNode.keys
-            for i in range(len(temp3)):
-                if (temp3[i] == n):
-                    parentNode.values = parentNode.values[:i] + \
-                        [value] + parentNode.values[i:]
-                    parentNode.keys = parentNode.keys[:i +
-                                                      1] + [ndash] + parentNode.keys[i + 1:]
-                    if (len(parentNode.keys) > parentNode.order):
-                        parentdash = BPlusNode(parentNode.order)
-                        parentdash.parent = parentNode.parent
-                        mid = int(math.ceil(parentNode.order / 2)) - 1
-                        parentdash.values = parentNode.values[mid + 1:]
-                        parentdash.keys = parentNode.keys[mid + 1:]
-                        value_ = parentNode.values[mid]
-                        if (mid == 0):
-                            parentNode.values = parentNode.values[:mid + 1]
+        
+            # Insert the new value and child into the parent node
+            parent_node = node.parent
+            parent_keys = parent_node.keys
+            for i in range(len(parent_keys)):
+                if parent_keys[i] == node:
+                    # Insert the new value and new child at the appropriate position
+                    parent_node.values = parent_node.values[:i] + [new_value] + parent_node.values[i:]
+                    parent_node.keys = parent_node.keys[:i + 1] + [new_child] + parent_node.keys[i + 1:]
+                    
+                    # If the parent node is overfull, split it
+                    if len(parent_node.keys) > parent_node.order:
+                        new_parent = BPlusNode(parent_node.order)
+                        new_parent.parent = parent_node.parent
+                        mid_index = int(math.ceil(parent_node.order / 2)) - 1
+                        
+                        # Distribute values and keys
+                        new_parent.values = parent_node.values[mid_index + 1:]
+                        new_parent.keys = parent_node.keys[mid_index + 1:]
+                        middle_value = parent_node.values[mid_index]
+                        
+                        # Trim the original parent node
+                        if mid_index == 0:
+                            parent_node.values = parent_node.values[:mid_index + 1]
                         else:
-                            parentNode.values = parentNode.values[:mid]
-                        parentNode.keys = parentNode.keys[:mid + 1]
-                        for j in parentNode.keys:
-                            j.parent = parentNode
-                        for j in parentdash.keys:
-                            j.parent = parentdash
-                        self.insert_in_parent(parentNode, value_, parentdash)
+                            parent_node.values = parent_node.values[:mid_index]
+                        parent_node.keys = parent_node.keys[:mid_index + 1]
+                        
+                        # Update parent references
+                        for child in parent_node.keys:
+                            child.parent = parent_node
+                        for child in new_parent.keys:
+                            child.parent = new_parent
+                        
+                        # Recursively insert the middle value into the parent
+                        self.insert_in_parent(parent_node, middle_value, new_parent)
+                    return
+
 
         # Delete a node
         def delete(self, key):
@@ -480,7 +470,7 @@ def _(BPlusNode, math):
             node_ = self.search(key)
         
             if not node_:
-                print("Key not found in Tree")
+                print("Key not found")
                 return
         
             # Locate the key within the node
@@ -502,14 +492,20 @@ def _(BPlusNode, math):
                             # Propagate changes to maintain B+ tree properties
                             self.delete_entry(node_, key, key)
                     return
-        
-            # If we reach here, the key was not found in the node
-            print("Key not found in Tree")
+            print("Key not found")
 
-        def move_kv(self, neighbor_node, i):
+        @staticmethod
+        def move_kv(neighbor_node, i):
             moved_key = neighbor_node.keys.pop(i)
             moved_value = neighbor_node.values.pop(i)
             return moved_key, moved_value
+
+        @staticmethod
+        def temp(parent_node, separator_value, val):
+            for i, value in enumerate(parent_node.values):
+                if value == separator_value:
+                    parent_node.values[i] = val
+                    break
 
         # Delete an entry
         def delete_entry(self, current_node, target_value, target_key):
@@ -593,46 +589,26 @@ def _(BPlusNode, math):
                 else:
                     if is_predecessor:
                         if not current_node.is_leaf:
-                            moved_key, moved_value = self.move_kv(neighbor_node, i=-1)
-                            # moved_key = neighbor_node.keys.pop(-1)
-                            # moved_value = neighbor_node.values.pop(-1)
+                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=-1)
                             current_node.keys.insert(0, moved_key)
                             current_node.values.insert(0, separator_value)
-                            for i, value in enumerate(parent_node.values):
-                                if value == separator_value:
-                                    parent_node.values[i] = moved_value
-                                    break
+                            BPlusTree.temp(parent_node, separator_value, moved_value)
                         else:
-                            moved_key, moved_value = self.move_kv(neighbor_node, i=-1)
-                            # moved_key = neighbor_node.keys.pop(-1)
-                            # moved_value = neighbor_node.values.pop(-1)
+                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=-1)
                             current_node.keys.insert(0, moved_key)
                             current_node.values.insert(0, moved_value)
-                            for i, value in enumerate(parent_node.values):
-                                if value == separator_value:
-                                    parent_node.values[i] = moved_value
-                                    break
+                            BPlusTree.temp(parent_node, separator_value, moved_value)
                     else:
                         if not current_node.is_leaf:
-                            moved_key, moved_value = self.move_kv(neighbor_node, i=0)
-                            # moved_key = neighbor_node.keys.pop(0)
-                            # moved_value = neighbor_node.values.pop(0)
+                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=0)
                             current_node.keys.append(moved_key)
                             current_node.values.append(separator_value)
-                            for i, value in enumerate(parent_node.values):
-                                if value == separator_value:
-                                    parent_node.values[i] = moved_value
-                                    break
+                            BPlusTree.temp(parent_node, separator_value, moved_value)
                         else:
-                            moved_key, moved_value = self.move_kv(neighbor_node, i=0)
-                            # moved_key = neighbor_node.keys.pop(0)
-                            # moved_value = neighbor_node.values.pop(0)
+                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=0)
                             current_node.keys.append(moved_key)
                             current_node.values.append(moved_value)
-                            for i, value in enumerate(parent_node.values):
-                                if value == separator_value:
-                                    parent_node.values[i] = neighbor_node.values[0]
-                                    break
+                            BPlusTree.temp(parent_node, separator_value, neighbor_node.values[0])
         
                     if not neighbor_node.is_leaf:
                         for child in neighbor_node.keys:
