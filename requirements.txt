@@ -3,3 +3,4 @@ matplotlib
 nbformat
 pympler
 pandas
+seaborn
