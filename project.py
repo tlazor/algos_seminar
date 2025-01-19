@@ -76,40 +76,6 @@ def _():
 
 
 @app.cell
-def _():
-    # import cProfile
-    # import pstats
-    # from io import StringIO
-    # import os
-
-    # from pympler.asizeof import asizeof
-
-    # import pandas as pd
-
-    # results_df = pd.Dataframe()
-
-    # def profile(func):
-    #     def wrapper(*args, **kwargs):
-    #         profiler = cProfile.Profile()
-    #         profiler.enable()
-    #         result = func(*args, **kwargs)
-    #         profiler.disable()
-    #         s = StringIO()
-    #         ps = pstats.Stats(profiler, stream=s).strip_dirs().sort_stats('cumulative')
-
-    #         # Filter stats to include only functions from your script
-    #         script_name = os.path.basename(__file__)  # Get the script name
-    #         filtered_stats = [
-    #             print(f"Cumulative time for {func.__name__}: {value[3]:.6f} seconds")  # Extract the function name
-    #             for key, value in ps.stats.items() if func.__name__ == key[2]
-    #         ]
-
-    #         return result
-    #     return wrapper
-    return
-
-
-@app.cell
 def _(mo):
     mo.md(r"""## B Tree Implementation""")
     return
@@ -437,323 +403,409 @@ def _(mo):
 
 
 @app.cell
-def _(array):
-    class BPlusNode:
-        def __init__(self, order):
-            self.order = order
-            self.values = array('i')
-            self.keys = []
-            self.next_key = None
-            self.parent = None
-            self.is_leaf = False
-
-        # Insert at the leaf
-        def insert_at_leaf(self, leaf, value, key):
-            if self.values:
-                for i in range(len(self.values)):
-                    if value == self.values[i]:
-                        self.keys[i].append(key)  # Append key to the existing array at index i
-                        break
-                    elif value < self.values[i]:
-                        # Insert value and key at the correct position
-                        self.values = array('i', self.values[:i]) + array('i', [value]) + array('i', self.values[i:])
-                        self.keys = self.keys[:i] + [[key]] + self.keys[i:]
-                        break
-                    elif i + 1 == len(self.values):
-                        self.values.append(value)
-                        self.keys.append([key])
-                        break
-            else:
-                # Initialize with the first value and key
-                self.values = array('i', [value])
-                self.keys = [[key]]
-    return (BPlusNode,)
-
-
-@app.cell
 def _(mo):
     mo.md(r"""### BPlusTree""")
     return
 
 
 @app.cell
-def _(BPlusNode, math):
-    class BPlusTree:
+def _():
+    class Node(object):
+        """
+        Base node object.
+
+        Each node stores keys and values. Keys are not unique to each value,
+        and as such values are stored as a list under each key.
+        """
         def __init__(self, order):
-            self.root = BPlusNode(order)
-            self.root.is_leaf = True
+            self.order = order       # Maximum number of keys
+            self.keys = []
+            self.values = []
+            self.leaf = True         # Leaf by default; can become internal after splits
 
-        # Insert operation
-        def insert(self, value, key):
-            # value = str(value)
-            old_node = self.search(value)
-            old_node.insert_at_leaf(old_node, value, key)
-
-            if (len(old_node.values) == old_node.order):
-                node1 = BPlusNode(old_node.order)
-                node1.is_leaf = True
-                node1.parent = old_node.parent
-                mid = int(math.ceil(old_node.order / 2)) - 1
-                node1.values = old_node.values[mid + 1:]
-                node1.keys = old_node.keys[mid + 1:]
-                node1.next_key = old_node.next_key
-                old_node.values = old_node.values[:mid + 1]
-                old_node.keys = old_node.keys[:mid + 1]
-                old_node.next_key = node1
-                self.insert_in_parent(old_node, node1.values[0], node1)
-
-        # Search operation for different operations
-        def search(self, value):
-            current_node = self.root
-            while(current_node.is_leaf == False):
-                temp2 = current_node.values
-                for i in range(len(temp2)):
-                    if (value == temp2[i]):
-                        current_node = current_node.keys[i + 1]
-                        break
-                    elif (value < temp2[i]):
-                        current_node = current_node.keys[i]
-                        break
-                    elif (i + 1 == len(current_node.values)):
-                        current_node = current_node.keys[i + 1]
-                        break
-            return current_node
-
-        def range_search(self, start_value, end_value):
-            results = []
-            # Find the starting point for the range
-            current_node = self.search(start_value)
-
-            while current_node:
-                for value in current_node.values:
-                    if start_value <= value <= end_value:
-                        results.append(value)
-                    elif value > end_value:
-                        # We've gone past the range, so stop searching
-                        return results
-
-                # Move to the next leaf node using the linked list
-                current_node = current_node.next_key
-
-            return results
-
-        # Find the node
-        def find(self, value, key):
-            l = self.search(value)
-            for i, item in enumerate(l.values):
-                if item == value:
-                    if key in l.keys[i]:
-                        return True
-                    else:
-                        return False
-            return False
-
-        # Inserting at the parent
-        def insert_in_parent(self, node, new_value, new_child):
-            # If the node is the root, create a new root
-            if self.root == node:
-                new_root = BPlusNode(node.order)
-                new_root.values = [new_value]
-                new_root.keys = [node, new_child]
-                self.root = new_root
-                node.parent = new_root
-                new_child.parent = new_root
+        def add(self, key, value):
+            """
+            Adds a key-value pair to the node (leaf).
+            """
+            if not self.keys:
+                self.keys.append(key)
+                self.values.append([value])
                 return
 
-            # Insert the new value and child into the parent node
-            parent_node = node.parent
-            parent_keys = parent_node.keys
-            for i in range(len(parent_keys)):
-                if parent_keys[i] == node:
-                    # Insert the new value and new child at the appropriate position
-                    parent_node.values = parent_node.values[:i] + [new_value] + parent_node.values[i:]
-                    parent_node.keys = parent_node.keys[:i + 1] + [new_child] + parent_node.keys[i + 1:]
-
-                    # If the parent node is overfull, split it
-                    if len(parent_node.keys) > parent_node.order:
-                        new_parent = BPlusNode(parent_node.order)
-                        new_parent.parent = parent_node.parent
-                        mid_index = int(math.ceil(parent_node.order / 2)) - 1
-
-                        # Distribute values and keys
-                        new_parent.values = parent_node.values[mid_index + 1:]
-                        new_parent.keys = parent_node.keys[mid_index + 1:]
-                        middle_value = parent_node.values[mid_index]
-
-                        # Trim the original parent node
-                        if mid_index == 0:
-                            parent_node.values = parent_node.values[:mid_index + 1]
-                        else:
-                            parent_node.values = parent_node.values[:mid_index]
-                        parent_node.keys = parent_node.keys[:mid_index + 1]
-
-                        # Update parent references
-                        for child in parent_node.keys:
-                            child.parent = parent_node
-                        for child in new_parent.keys:
-                            child.parent = new_parent
-
-                        # Recursively insert the middle value into the parent
-                        self.insert_in_parent(parent_node, middle_value, new_parent)
+            for i, item in enumerate(self.keys):
+                if key == item:
+                    # Key already exists; append value to existing list
+                    self.values[i].append(value)
+                    return
+                elif key < item:
+                    self.keys.insert(i, key)
+                    self.values.insert(i, [value])
                     return
 
+            # If new key is greater than all existing keys
+            self.keys.append(key)
+            self.values.append([value])
 
-        # Delete a node
-        def delete(self, key):
-            # Find the node containing the key
-            node_ = self.search(key)
+        def split(self):
+            """
+            Splits the node into two, and transforms 'self' into an internal node
+            by setting:
+                self.keys = [right.keys[0]]
+                self.values = [left, right]
+                self.leaf = False
+            """
+            mid = self.order // 2
 
-            if not node_:
-                print("Key not found")
-                return
+            left = Node(self.order)
+            right = Node(self.order)
 
-            # Locate the key within the node
-            for i, key_list in enumerate(node_.keys):
-                if key in key_list:
-                    # Remove the key from the key list
-                    key_list.remove(key)
+            left.keys = self.keys[:mid]
+            left.values = self.values[:mid]
 
-                    # If the key list becomes empty, handle node adjustment
-                    if not key_list:
-                        del node_.keys[i]
-                        node_.values.pop(i)
+            right.keys = self.keys[mid:]
+            right.values = self.values[mid:]
 
-                        if node_ == self.root:
-                            # Special case: if the root becomes empty
-                            if not node_.keys:
-                                self.root = None
-                        else:
-                            # Propagate changes to maintain B+ tree properties
-                            self.delete_entry(node_, key, key)
-                    return
-            print("Key not found")
+            # 'self' becomes an internal node
+            self.keys = [right.keys[0]]
+            self.values = [left, right]
+            self.leaf = False
 
-        @staticmethod
-        def move_kv(neighbor_node, i):
-            moved_key = neighbor_node.keys.pop(i)
-            moved_value = neighbor_node.values.pop(i)
-            return moved_key, moved_value
+        def is_full(self):
+            """
+            Returns True if the node is holding the maximum number of keys.
+            """
+            return len(self.keys) >= self.order
 
-        @staticmethod
-        def temp(parent_node, separator_value, val):
-            for i, value in enumerate(parent_node.values):
-                if value == separator_value:
-                    parent_node.values[i] = val
+        def show(self, level=0):
+            """
+            Recursively prints the keys in the (sub)tree rooted at this node.
+            """
+            print("  " * level + f"Node(keys={self.keys})")
+            if not self.leaf:
+                for child in self.values:
+                    child.show(level + 1)
+
+
+    class BPlusTree(object):
+        def __init__(self, order=4):
+            self.root = Node(order)
+            # For a node with 'order' keys, typical B+‐tree min. # of keys in non-root is:
+            #    min_keys = ceil(order / 2)
+            # This can vary by implementation. We'll define a simple threshold below:
+            self.min_degree = (order + 1) // 2   # This is used to figure out minimum keys.
+
+        def _find(self, node, key):
+            """
+            Given an internal node and a target key, returns (child, index)
+            where 'child' is the branch of node.values[] to follow, and 'index'
+            is that child's index in node.values.
+            """
+            for i, item in enumerate(node.keys):
+                if key < item:
+                    return node.values[i], i
+            return node.values[-1], len(node.keys)
+
+        def _merge(self, parent, child, index):
+            """
+            Helper used after a leaf splits. 'child' has turned into an internal node
+            containing [left_child, right_child]. Insert the pivot (child.keys[0]) into
+            'parent' at the proper location, and re-link parent.values.
+            """
+            # Remove old pointer to 'child'
+            parent.values.pop(index)
+
+            pivot = child.keys[0]
+            inserted = False
+
+            for i, key in enumerate(parent.keys):
+                if pivot < key:
+                    parent.keys.insert(i, pivot)
+                    parent.values[i:i] = child.values
+                    inserted = True
                     break
 
-        # Delete an entry
-        def delete_entry(self, current_node, target_value, target_key):
+            if not inserted:
+                # Insert at the end
+                parent.keys.append(pivot)
+                parent.values.extend(child.values)
 
-            # Remove the key and value if the current node is not a leaf
-            if not current_node.is_leaf:
-                for i, key in enumerate(current_node.keys):
-                    if key == target_key:
-                        current_node.keys.pop(i)
-                        break
-                for i, value in enumerate(current_node.values):
-                    if value == target_value:
-                        current_node.values.pop(i)
-                        break
+        def insert(self, key, value):
+            """
+            Insert (key, value) into the B+ tree, splitting as needed.
+            """
+            if self.root.is_full() and self.root.leaf:
+                # Special case: root is full and is a leaf
+                self.root.split()
+                # After splitting, root has 1 key and 2 children
+                # We now proceed to insert into the correct child
+                self._insert_non_full(self.root, key, value)
+            else:
+                self._insert_non_full(self.root, key, value)
 
-            # Adjust the root if it becomes a single key
-            if self.root == current_node and len(current_node.keys) == 1:
-                self.root = current_node.keys[0]
-                current_node.keys[0].parent = None
-                del current_node
+        def _insert_non_full(self, node, key, value):
+            """
+            Insert (key, value) into node/subtree, assuming node is not full
+            (or is root which may have just been split).
+            """
+            if node.leaf:
+                node.add(key, value)
+            else:
+                # Find which child to descend into
+                child, index = self._find(node, key)
+
+                # If that child is full, split it before descending
+                if child.is_full() and child.leaf:
+                    child.split()
+                    # After splitting, 'child' is an internal node with 2 children
+                    self._merge(node, child, index)
+                    # Determine which child to actually go down into
+                    # Compare 'key' with pivot (child.keys[0]) to pick left or right
+                    if key < node.keys[index]:
+                        child = node.values[index]
+                    else:
+                        child = node.values[index + 1]
+
+                elif child.is_full() and not child.leaf:
+                    # If it's a full internal node, you would normally split it as well
+                    # and merge it into 'node'. This is a simplified approach:
+                    child.split()
+                    self._merge(node, child, index)
+                    # Decide which side to go to:
+                    if key < node.keys[index]:
+                        child = node.values[index]
+                    else:
+                        child = node.values[index + 1]
+
+                # Recurse
+                self._insert_non_full(child, key, value)
+
+        def search(self, key):
+            node = self.root
+            while not node.leaf:
+                node, _ = self._find(node, key)
+
+            for i, item in enumerate(node.keys):
+                if key == item:
+                    return node.values[i]
+            return None
+
+        def range_search(self, low, high):
+            results = []
+            self._range_search_node(self.root, low, high, results)
+            return results
+
+        def _range_search_node(self, node, low, high, results):
+            if node.leaf:
+                # Check all keys in this leaf
+                for i, key in enumerate(node.keys):
+                    if low <= key <= high:
+                        # Append all values associated with that key
+                        results.extend(node.values[i])
+            else:
+                # If it's an internal node, recurse on all children.
+                # (You can do more pruning if desired, but this is simple and correct.)
+                for child in node.values:
+                    self._range_search_node(child, low, high, results)
+
+        def delete(self, key):
+            # 1) Find the leaf containing 'key'
+            path = []  # Will store (node, index_in_parent) as we go down
+            node = self.root
+            while not node.leaf:
+                child, idx = self._find(node, key)
+                path.append((node, idx))
+                node = child
+
+            # 2) Remove the key (and possibly its values) from the leaf
+            deleted_index = None
+            for i, item in enumerate(node.keys):
+                if item == key:
+                    # Remove one value from the associated list
+                    node.values[i].pop()
+                    # If that list becomes empty, remove the key entirely
+                    if not node.values[i]:
+                        node.keys.pop(i)
+                        node.values.pop(i)
+                    deleted_index = i
+                    break
+
+            # If the key wasn't found, nothing to delete
+            if deleted_index is None:
                 return
 
-            # Check if the node is underfull
-            is_underfull = (
-                (len(current_node.keys) < int(math.ceil(current_node.order / 2)) and not current_node.is_leaf)
-                or (len(current_node.values) < int(math.ceil((current_node.order - 1) / 2)) and current_node.is_leaf)
-            )
+            # 3) Rebalance upward if needed
+            self._rebalance_after_delete(node, path)
 
-            if is_underfull:
-                is_predecessor = False
-                parent_node = current_node.parent
-                previous_node = None
-                next_node = None
-                previous_key = None
-                next_key = None
+        def _rebalance_after_delete(self, node, path):
+            # If the node is root and it's a leaf, no rebalance needed if it still has >= 1 key
+            if node == self.root:
+                self._check_root_shrink()
+                return
 
-                for i, child in enumerate(parent_node.keys):
-                    if child == current_node:
-                        if i > 0:
-                            previous_node = parent_node.keys[i - 1]
-                            previous_key = parent_node.values[i - 1]
-                        if i < len(parent_node.keys) - 1:
-                            next_node = parent_node.keys[i + 1]
-                            next_key = parent_node.values[i]
+            while True:
+                if self._has_enough_keys(node):
+                    # No rebalancing needed
+                    return
 
-                # Determine the neighbor node and value
-                if not previous_node:
-                    neighbor_node = next_node
-                    separator_value = next_key
-                elif not next_node:
-                    is_predecessor = True
-                    neighbor_node = previous_node
-                    separator_value = previous_key
-                else:
-                    if len(current_node.values) + len(next_node.values) < current_node.order:
-                        neighbor_node = next_node
-                        separator_value = next_key
-                    else:
-                        is_predecessor = True
-                        neighbor_node = previous_node
-                        separator_value = previous_key
+                # If node is the root (but not enough keys), handle root special case
+                if node == self.root:
+                    self._check_root_shrink()
+                    return
 
-                # Merge or redistribute
-                if len(current_node.values) + len(neighbor_node.values) < current_node.order:
-                    if not is_predecessor:
-                        current_node, neighbor_node = neighbor_node, current_node
+                # Otherwise, get parent info from path
+                if not path:
+                    return  # Should never happen unless node is root
+                parent, parent_index = path.pop()
 
-                    neighbor_node.keys += current_node.keys
-                    if not current_node.is_leaf:
-                        neighbor_node.values.append(separator_value)
-                    else:
-                        neighbor_node.next_key = current_node.next_key
-                    neighbor_node.values += current_node.values
+                # Attempt to borrow from sibling or merge
+                left_sibling, right_sibling, left_index, right_index = \
+                    self._get_siblings(parent, node)
 
-                    if not neighbor_node.is_leaf:
-                        for child in neighbor_node.keys:
-                            child.parent = neighbor_node
+                # 1) Try to borrow from left sibling
+                if left_sibling and len(left_sibling.keys) > self._min_keys_required():
+                    self._borrow_from_left(node, parent, left_sibling, left_index)
+                    return
 
-                    self.delete_entry(current_node.parent, separator_value, current_node)
-                    del current_node
-                else:
-                    if is_predecessor:
-                        if not current_node.is_leaf:
-                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=-1)
-                            current_node.keys.insert(0, moved_key)
-                            current_node.values.insert(0, separator_value)
-                            BPlusTree.temp(parent_node, separator_value, moved_value)
-                        else:
-                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=-1)
-                            current_node.keys.insert(0, moved_key)
-                            current_node.values.insert(0, moved_value)
-                            BPlusTree.temp(parent_node, separator_value, moved_value)
-                    else:
-                        if not current_node.is_leaf:
-                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=0)
-                            current_node.keys.append(moved_key)
-                            current_node.values.append(separator_value)
-                            BPlusTree.temp(parent_node, separator_value, moved_value)
-                        else:
-                            moved_key, moved_value = BPlusTree.move_kv(neighbor_node, i=0)
-                            current_node.keys.append(moved_key)
-                            current_node.values.append(moved_value)
-                            BPlusTree.temp(parent_node, separator_value, neighbor_node.values[0])
+                # 2) Try to borrow from right sibling
+                if right_sibling and len(right_sibling.keys) > self._min_keys_required():
+                    self._borrow_from_right(node, parent, right_sibling, right_index)
+                    return
 
-                    if not neighbor_node.is_leaf:
-                        for child in neighbor_node.keys:
-                            child.parent = neighbor_node
-                    if not current_node.is_leaf:
-                        for child in current_node.keys:
-                            child.parent = current_node
-                    if not parent_node.is_leaf:
-                        for child in parent_node.keys:
-                            child.parent = parent_node
-    return (BPlusTree,)
+                # 3) Merge with left sibling if it exists
+                if left_sibling:
+                    self._merge_nodes(left_sibling, node, parent)
+                    node = left_sibling  # merged node is 'left_sibling'
+                # 4) Else merge with right sibling
+                elif right_sibling:
+                    self._merge_nodes(node, right_sibling, parent)
+                    # node remains 'node' since we merged right_sibling into it
+
+                # Now 'parent' may have lost a key/pointer; if parent is below min, continue upward
+                node = parent
+                if node == self.root:
+                    self._check_root_shrink()
+                    return
+
+        def _check_root_shrink(self):
+            if not self.root.leaf and len(self.root.values) == 1:
+                # Only one subtree -> make it the new root
+                self.root = self.root.values[0]
+            # If it's a leaf but has 0 keys, it's an empty tree
+            if self.root.leaf and len(self.root.keys) == 0:
+                # The tree is completely empty now
+                pass
+
+        def _has_enough_keys(self, node):
+            # Root can have fewer keys. For non-root:
+            if node == self.root:
+                return True
+            return len(node.keys) >= self._min_keys_required()
+
+        def _min_keys_required(self):
+            # Because 'order' is max # of keys, let's define half:
+            # e.g. if order=4 => min_degree= (4+1)//2=2 => minimum keys=2-1=1
+            return self.min_degree - 1
+
+        def _get_siblings(self, parent, node):
+            left_sib = None
+            right_sib = None
+            left_i = None
+            right_i = None
+
+            for i, child in enumerate(parent.values):
+                if child is node:
+                    # Check left
+                    if i - 1 >= 0:
+                        left_sib = parent.values[i - 1]
+                        left_i = i - 1
+                    # Check right
+                    if i + 1 < len(parent.values):
+                        right_sib = parent.values[i + 1]
+                        right_i = i + 1
+                    break
+
+            return left_sib, right_sib, left_i, right_i
+
+        def _borrow_from_left(self, node, parent, left_sib, left_i):
+            # Move the last key from left_sib to the front of node
+            borrowed_key = left_sib.keys.pop()
+            borrowed_values = left_sib.values.pop()
+            node.keys.insert(0, borrowed_key)
+            node.values.insert(0, borrowed_values)
+
+            # In a B+‐tree, the parent's pivot that separates left_sib and node
+            # typically becomes node's first key. So we also update parent.keys[left_i].
+            # Because parent.keys[left_i] was the first key in 'node' prior to borrowing.
+            parent_key_to_update = borrowed_key
+            parent.keys[left_i] = node.keys[0]  # pivot is updated
+
+        def _borrow_from_right(self, node, parent, right_sib, right_i):
+            borrowed_key = right_sib.keys.pop(0)
+            borrowed_values = right_sib.values.pop(0)
+            node.keys.append(borrowed_key)
+            node.values.append(borrowed_values)
+
+            # Update parent's pivot
+            parent.keys[right_i - 1] = right_sib.keys[0]
+
+        def _merge_nodes(self, left_node, right_node, parent):
+            # Identify the pivot that separates left_node and right_node in 'parent'
+            pivot_index = None
+            for i, child in enumerate(parent.values):
+                if child is left_node:
+                    # The pivot we want to remove from parent is parent.keys[i]
+                    # that leads to right_node.  That pivot might also be i or i-1
+                    # depending on your B+ tree pivot arrangement. We do a simple approach:
+                    pivot_index = i
+                    break
+
+            # If pivot_index is the last child, the pivot key might be pivot_index-1
+            # This can vary by implementation. Adjust if needed:
+            if pivot_index is not None and pivot_index >= len(parent.keys):
+                pivot_index = len(parent.keys) - 1
+
+            # Merge keys/values
+            left_node.keys.extend(right_node.keys)
+            left_node.values.extend(right_node.values)
+
+            # Remove right_node from parent.values
+            parent.values.remove(right_node)
+
+            # Remove pivot key from parent.keys
+            # Usually, the pivot that belongs to right_node is at pivot_index or pivot_index-1
+            if pivot_index is not None and pivot_index < len(parent.keys):
+                parent.keys.pop(pivot_index)
+            else:
+                # fallback if pivot_index is out of range
+                if parent.keys:
+                    parent.keys.pop()
+
+    return BPlusTree, Node
+
+
+@app.cell
+def _(
+    BPlusTree,
+    asizeof,
+    create_tree,
+    delete_tree,
+    master_dataset,
+    search_tree,
+):
+    test_dataset = master_dataset[:1000]
+
+    # Creation experiment
+    test_tree = BPlusTree(3)
+    create_tree(test_dataset, test_tree)
+    print(f"\tsize of tree: {asizeof(test_tree)}")
+
+    # test_tree.print_tree()
+
+    # Search experiment
+    search_tree(test_dataset, test_tree)
+
+    delete_tree(test_dataset, test_tree)
+    return test_dataset, test_tree
 
 
 @app.cell
@@ -788,15 +840,18 @@ def _(BPlusTree):
         return dataset
 
     def create_tree(dataset, tree):
-        for i in dataset:
-            if isinstance(tree, BPlusTree):
+        if isinstance(tree, BPlusTree):
+            for i in dataset:
                 tree.insert(i, i)   
-            else:
+        else:
+            for i in dataset:
                 tree.insert(i)
 
     def delete_tree(dataset, tree):
         for i in dataset:
+            # print(f"deleting {i}")
             tree.delete(i)
+            # tree.print_tree()
 
     def search_tree(searchables, tree):
         for i in searchables:
@@ -852,7 +907,9 @@ def _(
 ):
     def all_tests(master_dataset, dataset_sizes, orders, tree_type):
         for order in orders:
+            print(f"{order=}")
             for d_size in dataset_sizes:
+                print(f"{d_size=}")
                 profiled_create = profile(tree_type=tree_type, order=order, operation="Insertion", tree_size=d_size)(create_tree)
                 profiled_delete = profile(tree_type=tree_type, order=order, operation="Deletion", tree_size=d_size)(delete_tree)
                 profiled_search = profile(tree_type=tree_type, order=order, operation="Search", tree_size=d_size)(search_tree)
@@ -863,10 +920,14 @@ def _(
                 # Creation experiment
                 tree = tree_type(order)
                 profiled_create(dataset, tree)
+                # create_tree(dataset,tree)
                 print(f"\tsize of tree: {asizeof(tree)}")
+
+                # tree.print_tree()
 
                 # Search experiment
                 profiled_search(dataset, tree)
+                # search_tree(dataset, tree)
 
                 # Range Search experiment
                 pairs = split_into_pairs(dataset, d_size // 10)
@@ -874,8 +935,6 @@ def _(
 
                 # Deletion experiment
                 profiled_delete(dataset, tree)
-
-                del tree
     return (all_tests,)
 
 
@@ -891,7 +950,7 @@ def _(generate_dataset, profile_data, random):
 
     profile_data.drop(profile_data.index, inplace=True)
 
-    dataset_sizes = [10**i for i in range(2, 6)]
+    dataset_sizes = [10**i for i in range(1, 5)]
     orders = [3,4,5]
 
     master_dataset = generate_dataset(dataset_sizes[-1])
@@ -911,6 +970,37 @@ def _(BPlusTree, all_tests, dataset_sizes, master_dataset, orders):
 
 
 @app.cell
+def _(pd):
+    data_bplus = {
+        "tree_type": ["BPlusTree"] * 12,
+        "order": [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5],
+        "d_size": [10, 100, 1000, 10000, 10, 100, 1000, 10000, 10, 100, 1000, 10000],
+        "size_of_tree": [3624, 28000, 279152, 2762960, 3344, 24384, 225928, 2257264, 3064, 21368, 205320, 2045608]
+    }
+
+    df_bplus = pd.DataFrame(data_bplus)
+
+    data_btree = {
+        "tree_type": ["BTree"] * 12,
+        "order": [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5],
+        "d_size": [10, 100, 1000, 10000, 10, 100, 1000, 10000, 10, 100, 1000, 10000],
+        "size_of_tree": [1808, 11632, 114248, 1164608, 1808, 9936, 92560, 939200, 1504, 6864, 64888, 644416]
+    }
+
+    df_btree = pd.DataFrame(data_btree)
+
+    # Combine both DataFrames
+    df_size = pd.concat([df_bplus, df_btree], ignore_index=True)
+    return data_bplus, data_btree, df_bplus, df_btree, df_size
+
+
+@app.cell
+def _(df_size):
+    df_size
+    return
+
+
+@app.cell
 def _(profile_data):
     profile_data
     return
@@ -923,68 +1013,102 @@ def _(mo):
 
 
 @app.cell
-def _(pd):
-    # Data extracted from the input
-    data = [
-        {"size": 100, "order": 4, "operation": "Insertion", "cumulative_time": 0.000413, "tree_size": 20656},
-        {"size": 100, "order": 4, "operation": "Search", "cumulative_time": 0.000287, "tree_size": None},
-        {"size": 100, "order": 4, "operation": "Range Search", "cumulative_time": 0.000331, "tree_size": None},
-        {"size": 100, "order": 4, "operation": "Deletion", "cumulative_time": 0.000752, "tree_size": 768},
-        {"size": 1000, "order": 4, "operation": "Insertion", "cumulative_time": 0.006043, "tree_size": 217744},
-        {"size": 1000, "order": 4, "operation": "Search", "cumulative_time": 0.004638, "tree_size": None},
-        {"size": 1000, "order": 4, "operation": "Range Search", "cumulative_time": 0.002864, "tree_size": None},
-        {"size": 1000, "order": 4, "operation": "Deletion", "cumulative_time": 0.011363, "tree_size": 768},
-        {"size": 10000, "order": 4, "operation": "Insertion", "cumulative_time": 0.083737, "tree_size": 2147752},
-        {"size": 10000, "order": 4, "operation": "Search", "cumulative_time": 0.071617, "tree_size": None},
-        {"size": 10000, "order": 4, "operation": "Range Search", "cumulative_time": 0.036210, "tree_size": None},
-        {"size": 10000, "order": 4, "operation": "Deletion", "cumulative_time": 0.146482, "tree_size": 768},
-        {"size": 100000, "order": 4, "operation": "Insertion", "cumulative_time": 1.672859, "tree_size": 21372968},
-        {"size": 100000, "order": 4, "operation": "Search", "cumulative_time": 0.986769, "tree_size": None},
-        {"size": 100000, "order": 4, "operation": "Range Search", "cumulative_time": 0.274352, "tree_size": None},
-        {"size": 100000, "order": 4, "operation": "Deletion", "cumulative_time": 1.862700, "tree_size": 768},
-    ]
+def _(df_size):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
 
-    # Convert the data to a DataFrame
-    df = pd.DataFrame(data)
-    return data, df
+    # Plot the effect of d_size on size_of_tree for each order and tree type
+    sns.set(style="whitegrid")
+
+    # Create a plot for each order and tree type
+    plt.figure(figsize=(12, 8))
+    sns.lineplot(
+        data=df_size,
+        x="d_size",
+        y="size_of_tree",
+        hue="tree_type",
+        style="order",
+        markers=True,
+        dashes=False
+    )
+
+    # Set plot labels and title
+    plt.title("Effect of Dataset Size (d_size) on Tree Size (size_of_tree)", fontsize=14)
+    plt.xlabel("Dataset Size (d_size)", fontsize=12)
+    plt.ylabel("Size of Tree (bytes)", fontsize=12)
+    plt.legend(title="Tree Type & Order", fontsize=10)
+    plt.xscale("log")  # Log scale for better visualization
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+
+    # Show the plot
+    plt.show()
+
+    return plt, sns
 
 
 @app.cell
-def _(df):
-    import matplotlib.pyplot as plt
+def _(plt, profile_data):
+    order_colors = {
+        3: "red",
+        4: "blue",
+        5: "green"
+    }
 
-    # Filter data for each operation
-    operations = df['operation'].unique()
-
-    # Plot cumulative time vs size for each operation
-    for operation in operations:
-        operation_data = df[df['operation'] == operation]
-        plt.figure(figsize=(8, 6))
-        if operation == "Range Search":
-            print(operation_data['cumulative_time'], operation_data['size'] // 10)
-            plt.plot(operation_data['size'], operation_data['cumulative_time'] / (operation_data['size'] // 10) * 1000, marker='o')
-        else:
-            plt.plot(operation_data['size'], operation_data['cumulative_time'] / operation_data['size'] * 1000, marker='o')
-        plt.title(f"Effect of Size on Operation Time: {operation}")
-        plt.xlabel("Size")
-        plt.ylabel("Time per Operation (milliseconds)")
-        # plt.xscale("log")  # Optional: Log scale for better visualization of size effects
-        plt.grid(True)
-        plt.show()
-
-    # Plot tree size vs size for each operation where tree size is available
-    for operation in operations:
-        operation_data = df[df['operation'] == "Insertion"]
-        if operation_data['tree_size'].notna().any():  # Only plot if tree size data exists
+    # Filter down to just the BPlusTree rows
+    for tree_kind in ['BTree', 'BPlusTree']:
+        df_tree = profile_data[profile_data['tree_type'] == tree_kind]
+        
+        # Get the set of operations in the BPlusTree subset
+        operations = df_tree['operation'].unique()
+        
+        # --- 1) Plot cumulative time vs size for each operation ---
+        for operation in operations:
+            operation_data = df_tree[df_tree['operation'] == operation]
+            
+            # Group data by order and tree size, taking the mean for numeric columns only
+            numeric_columns = ['cumulative_time']  # Add other numeric columns as needed
+            grouped_data = operation_data.groupby(['order', 'tree_size'])[numeric_columns].mean().reset_index()
+            
             plt.figure(figsize=(8, 6))
-            plt.plot(operation_data['size'], operation_data['tree_size'], marker='o')
-            plt.title(f"Effect of Dataset Size on Tree Size: {operation}")
-            plt.xlabel("Dataset Size")
-            plt.ylabel("Tree Size (bytes)")
-            # plt.xscale("log")  # Optional: Log scale for better visualization of size effects
+            
+            # Iterate over unique orders in the grouped data
+            for order in grouped_data['order'].unique():
+                order_data = grouped_data[grouped_data['order'] == order]
+                
+                # Use the correct color based on the tree order
+                color = order_colors.get(order, 'black')  # Default to black if order not found
+                
+                if operation == "Range Search":
+                    plt.plot(order_data['tree_size'],
+                             order_data['cumulative_time'] / (order_data['tree_size'] // 10) * 1000,
+                             marker='o',
+                             label=f"Range Search Time/Operation (Order {order})", color=color)
+                else:
+                    plt.plot(order_data['tree_size'],
+                             order_data['cumulative_time'] / order_data['tree_size'] * 1000,
+                             marker='o',
+                             label=f"{operation} Time/Operation (Order {order})", color=color)
+            
+            plt.title(f"B+Tree: Effect of Size on {operation} Time")
+            plt.xlabel("Size")
+            plt.ylabel("Time per Operation (milliseconds)")
             plt.grid(True)
+            plt.legend()
             plt.show()
-    return operation, operation_data, operations, plt
+
+    return (
+        color,
+        df_tree,
+        grouped_data,
+        numeric_columns,
+        operation,
+        operation_data,
+        operations,
+        order,
+        order_colors,
+        order_data,
+        tree_kind,
+    )
 
 
 @app.cell
