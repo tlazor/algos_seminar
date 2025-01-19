@@ -1089,7 +1089,7 @@ def _(plt, profile_data):
                              marker='o',
                              label=f"{operation} Time/Operation (Order {order})", color=color)
             
-            plt.title(f"B+Tree: Effect of Size on {operation} Time")
+            plt.title(f"{tree_kind}: Effect of Size on {operation} Time")
             plt.xlabel("Size")
             plt.ylabel("Time per Operation (milliseconds)")
             plt.grid(True)
